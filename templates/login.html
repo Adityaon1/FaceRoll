@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>FaceRoll — Sign In</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#f6f1e7;--card:#fffdf8;--border:#e5ddd0;--ink:#1c1710;--muted:#8a7d6b;--red:#c0392b;--blue:#1d4ed8}
+body{min-height:100vh;background:var(--bg);display:flex;align-items:center;justify-content:center;font-family:'DM Sans',sans-serif;padding:1rem;}
+/* subtle dot grid */
+body::before{content:'';position:fixed;inset:0;
+  background-image:radial-gradient(circle,rgba(28,23,16,.07) 1px,transparent 1px);
+  background-size:28px 28px;pointer-events:none;}
+
+.wrap{width:100%;max-width:420px;position:relative;z-index:1;}
+
+/* decorative rule */
+.rule{display:flex;align-items:center;gap:.75rem;margin-bottom:2rem;}
+.rule-line{flex:1;height:1px;background:var(--border);}
+.rule-diamond{width:8px;height:8px;background:var(--red);transform:rotate(45deg);flex-shrink:0;}
+
+.card{background:var(--card);border:1px solid var(--border);border-radius:2px;padding:2.5rem;
+  box-shadow:4px 4px 0 rgba(28,23,16,.06);}
+.card::before{content:'';display:block;width:40px;height:4px;
+  background:linear-gradient(90deg,var(--red),var(--blue));margin-bottom:1.5rem;}
+
+.school-name{font-family:'Playfair Display',serif;font-size:2rem;font-weight:800;
+  letter-spacing:-.03em;color:var(--ink);line-height:1;}
+.school-tag{font-size:.7rem;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.15em;font-family:'DM Mono',monospace;margin-top:.3rem;margin-bottom:2rem;}
+
+.tabs{display:flex;gap:.25rem;margin-bottom:1.75rem;
+  background:var(--bg);border:1px solid var(--border);border-radius:2px;padding:.25rem;}
+.tab{flex:1;padding:.5rem;border:none;background:none;cursor:pointer;
+  font-family:'DM Sans',sans-serif;font-size:.8rem;border-radius:2px;
+  color:var(--muted);transition:all .2s;display:flex;align-items:center;justify-content:center;gap:.35rem;}
+.tab.active{background:var(--ink);color:#fff;}
+
+label{display:block;font-size:.68rem;font-weight:500;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.1em;margin-bottom:.35rem;}
+input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:2px;
+  color:var(--ink);font-family:'DM Sans',sans-serif;font-size:.9rem;
+  padding:.65rem .9rem;outline:none;transition:border-color .2s,box-shadow .2s;margin-bottom:1rem;}
+input:focus{border-color:var(--red);box-shadow:0 0 0 3px rgba(192,57,43,.1);}
+input::placeholder{color:var(--muted);}
+
+.btn{width:100%;background:var(--ink);color:#fff;border:none;border-radius:2px;
+  padding:.8rem;font-family:'DM Sans',sans-serif;font-size:.9rem;font-weight:500;
+  cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:.5rem;
+  margin-top:.25rem;}
+.btn:hover{background:var(--red);}
+.btn:disabled{opacity:.4;cursor:not-allowed;}
+
+.error{background:rgba(192,57,43,.07);border:1px solid rgba(192,57,43,.2);border-radius:2px;
+  color:var(--red);font-size:.8rem;padding:.6rem .85rem;margin-bottom:1rem;display:none;}
+
+.hint{margin-top:1.5rem;padding:1rem;background:rgba(28,23,16,.03);
+  border:1px dashed var(--border);border-radius:2px;}
+.hint-title{font-size:.68rem;font-weight:500;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.1em;margin-bottom:.5rem;}
+.hint-row{display:flex;justify-content:space-between;font-size:.75rem;
+  font-family:'DM Mono',monospace;color:var(--ink);padding:.2rem 0;}
+.hint-row span{color:var(--muted);}
+
+.loader{width:14px;height:14px;border:2px solid rgba(255,255,255,.3);
+  border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="rule"><div class="rule-line"></div><div class="rule-diamond"></div><div class="rule-line"></div></div>
+  <div class="card">
+    <div class="school-name">FaceRoll</div>
+    <div class="school-tag">School Portal · Sign In</div>
+
+    <!-- Role tabs (visual hint only) -->
+    <div class="tabs">
+      <button class="tab active" onclick="setRole('admin','🔐 Admin')">🔐 Admin</button>
+      <button class="tab" onclick="setRole('teacher','👩‍🏫 Teacher')">👩‍🏫 Teacher</button>
+      <button class="tab" onclick="setRole('student','🎒 Student')">🎒 Student</button>
+      <button class="tab" onclick="setRole('parent','👪 Parent')">👪 Parent</button>
+    </div>
+
+    <div class="error" id="err"></div>
+    <div>
+      <label>Email Address</label>
+      <input id="email" type="email" placeholder="you@school.com" autocomplete="email">
+      <label>Password</label>
+      <input id="pw" type="password" placeholder="••••••••"
+             onkeydown="if(event.key==='Enter')login()">
+      <button class="btn" id="btn" onclick="login()">Sign In →</button>
+    </div>
+
+    <div class="hint">
+      <div class="hint-title">Default Admin Login</div>
+      <div class="hint-row">admin@school.com <span>admin123</span></div>
+    </div>
+  </div>
+  <div style="text-align:center;margin-top:1.5rem;font-size:.68rem;color:var(--muted);font-family:'DM Mono',monospace;letter-spacing:.08em;">
+    Developed by <strong style="color:var(--ink)">Piyush Kumar Pandey</strong>
+  </div>
+</div>
+<script>
+function setRole(r,label){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  event.target.classList.add('active');
+}
+async function login(){
+  const email=document.getElementById('email').value.trim();
+  const pw=document.getElementById('pw').value;
+  const err=document.getElementById('err');
+  const btn=document.getElementById('btn');
+  err.style.display='none';
+  if(!email||!pw){err.textContent='Please enter your email and password.';err.style.display='block';return;}
+  btn.innerHTML='<span class="loader"></span> Signing in…';btn.disabled=true;
+  try{
+    const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email,password:pw})});
+    const d=await r.json();
+    if(d.error){err.textContent=d.error;err.style.display='block';btn.innerHTML='Sign In →';btn.disabled=false;return;}
+    window.location.href='/dashboard';
+  }catch(e){
+    err.textContent='Connection error — is the server running?';err.style.display='block';
+    btn.innerHTML='Sign In →';btn.disabled=false;
+  }
+}
+</script>
+</body>
+</html>
