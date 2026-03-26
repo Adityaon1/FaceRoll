@@ -185,6 +185,9 @@ def root():
 @app.route('/login', methods=['GET'])
 def login_page(): return render_template('login.html')
 
+@app.route('/signup', methods=['GET'])
+def signup_page(): return render_template('signup.html')
+
 @app.route('/dashboard')
 @login_required
 def dashboard(): return render_template('dashboard.html')
@@ -206,6 +209,26 @@ def do_login():
     session['class']     = user['class_name']
     session['student_id']= user['student_id']
     return jsonify({'success':True,'role':user['role']})
+
+@app.route('/api/register', methods=['POST'])
+def do_register():
+    d = request.json
+    if not all([d.get('name'), d.get('email'), d.get('password'), d.get('role')]):
+        return jsonify({'error': 'Name, email, password and role are required'}), 400
+    if d['role'] not in ('admin', 'teacher', 'student', 'parent'):
+        return jsonify({'error': 'Invalid role'}), 400
+    if len(d['password']) < 6:
+        return jsonify({'error': 'Password must be at least 6 characters'}), 400
+    try:
+        conn = get_db()
+        conn.execute(
+            'INSERT INTO users (name, email, password, role, class_name) VALUES (?,?,?,?,?)',
+            (d['name'], d['email'], hash_pw(d['password']), d['role'], d.get('class_name', ''))
+        )
+        conn.commit(); conn.close()
+        return jsonify({'success': True})
+    except sqlite3.IntegrityError:
+        return jsonify({'error': 'An account with that email already exists'}), 409
 
 @app.route('/api/logout')
 def do_logout():
