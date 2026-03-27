@@ -533,3 +533,24 @@ if __name__ == '__main__':
     print('   Admin login: admin@school.com / admin123\n')
     import os; port=int(os.environ.get('PORT',5000))
     app.run(host='0.0.0.0',port=port,debug=True)
+
+@app.route('/forgot-password', methods=['GET'])
+def forgot_page(): return render_template('forgot.html')
+
+@app.route('/api/reset-password', methods=['POST'])
+def reset_password():
+    d = request.json
+    email = d.get('email','').strip()
+    new_pw = d.get('new_password','')
+    if not email or not new_pw:
+        return jsonify({'error': 'Email and new password required'}), 400
+    if len(new_pw) < 6:
+        return jsonify({'error': 'Password must be at least 6 characters'}), 400
+    conn = get_db()
+    user = conn.execute('SELECT id FROM users WHERE email=?', (email,)).fetchone()
+    if not user:
+        conn.close(); return jsonify({'error': 'No account found with that email'}), 404
+    conn.execute('UPDATE users SET password=? WHERE email=?', (hash_pw(new_pw), email))
+    conn.commit(); conn.close()
+    return jsonify({'success': True})
+
