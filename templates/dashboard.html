@@ -303,9 +303,12 @@ tr:hover td{background:rgba(192,57,43,.02);}
       <div class="card">
         <div class="card-head">
           <div class="card-title">Session History</div>
-          <select id="hist-cls" onchange="loadHistory()" style="width:auto;font-size:.75rem;padding:.35rem .6rem">
-            <option value="">All Classes</option>
-          </select>
+          <div style="display:flex;gap:.5rem;align-items:center">
+            <select id="hist-cls" onchange="loadHistory()" style="width:auto;font-size:.75rem;padding:.35rem .6rem">
+              <option value="">All Classes</option>
+            </select>
+            <button class="btn btn-ghost btn-sm" onclick="exportCSV()">⬇ Export CSV</button>
+          </div>
         </div>
         <div class="tbl-wrap"><table>
           <thead><tr><th>Session</th><th>Class</th><th>Date</th><th>Present</th><th>Absent</th></tr></thead>
@@ -352,6 +355,60 @@ tr:hover td{background:rgba(192,57,43,.02);}
           <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Class</th><th></th></tr></thead>
           <tbody id="users-body"></tbody>
         </table></div>
+      </div>
+    </div>
+
+    <!-- ── ANALYTICS ─── -->
+    <div id="page-analytics" class="page">
+      <div class="stats" id="analytics-stats"></div>
+      <div class="g2">
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title">Attendance by Class</div>
+            <select id="an-cls" onchange="loadAnalytics()" style="width:auto;font-size:.75rem;padding:.35rem .6rem">
+              <option value="">All Classes</option>
+            </select>
+          </div>
+          <canvas id="chart-bar" height="220"></canvas>
+        </div>
+        <div class="card">
+          <div class="card-head"><div class="card-title">Present vs Absent</div></div>
+          <canvas id="chart-pie" height="220"></canvas>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">Attendance Trend (Last 10 Sessions)</div>
+          <button class="btn btn-ghost btn-sm" onclick="exportCSV()">⬇ Export CSV</button>
+        </div>
+        <canvas id="chart-line" height="120"></canvas>
+      </div>
+    </div>
+
+    <!-- ── PROFILE ─── -->
+    <div id="page-profile" class="page">
+      <div class="g2">
+        <div class="card">
+          <div class="card-head"><div class="card-title">My Profile</div></div>
+          <div style="display:flex;align-items:center;gap:1.1rem;margin-bottom:1.25rem">
+            <div style="width:56px;height:56px;border-radius:50%;background:var(--red);display:flex;align-items:center;justify-content:center;font-size:1.5rem;font-weight:700;color:#fff;flex-shrink:0" id="prof-av">?</div>
+            <div>
+              <div style="font-family:'Playfair Display',serif;font-size:1.2rem;font-weight:700" id="prof-name">—</div>
+              <div style="font-size:.72rem;color:var(--muted);font-family:'DM Mono',monospace;margin-top:.2rem" id="prof-role">—</div>
+            </div>
+          </div>
+          <div class="fg"><label>Full Name</label><input id="prof-name-inp" placeholder="Your name"></div>
+          <div class="fg"><label>Email</label><input id="prof-email-inp" type="email" placeholder="you@school.com"></div>
+          <div class="fg"><label>Class</label><input id="prof-class-inp" placeholder="e.g. 10-A"></div>
+          <button class="btn btn-ink" style="width:100%" onclick="saveProfile()">Save Changes</button>
+        </div>
+        <div class="card">
+          <div class="card-head"><div class="card-title">Change Password</div></div>
+          <div class="fg"><label>Current Password</label><input id="pw-old" type="password" placeholder="••••••••"></div>
+          <div class="fg"><label>New Password</label><input id="pw-new" type="password" placeholder="Min. 6 characters"></div>
+          <div class="fg"><label>Confirm New Password</label><input id="pw-new2" type="password" placeholder="Repeat new password"></div>
+          <button class="btn btn-ink" style="width:100%" onclick="changePassword()">Update Password</button>
+        </div>
       </div>
     </div>
 
@@ -467,8 +524,9 @@ med"></div>
     </div>
   </div>
 </div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script>
-let ME={}, allStudents=[];
+let ME={}, allStudents=[], chartBar=null, chartPie=null, chartLine=null, historyCache=[];
 const DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const NAVS={
   admin:[
@@ -476,29 +534,40 @@ const NAVS={
     {icon:'👤',label:'Students',page:'students'},
     {sec:'Academic'},
     {icon:'📷',label:'Attendance',page:'attendance'},
+    {icon:'📊',label:'Analytics',page:'analytics'},
     {icon:'📅',label:'Timetable',page:'timetable'},
     {icon:'📢',label:'Notices',page:'notices'},
     {sec:'Admin'},
     {icon:'🔐',label:'User Accounts',page:'users'},
+    {sec:'Account'},
+    {icon:'🙍',label:'My Profile',page:'profile'},
   ],
   teacher:[
     {icon:'🏠',label:'Dashboard',page:'home'},
     {icon:'👤',label:'Students',page:'students'},
     {icon:'📷',label:'Attendance',page:'attendance'},
+    {icon:'📊',label:'Analytics',page:'analytics'},
     {icon:'📅',label:'Timetable',page:'timetable'},
     {icon:'📢',label:'Notices',page:'notices'},
+    {sec:'Account'},
+    {icon:'🙍',label:'My Profile',page:'profile'},
   ],
   student:[
     {icon:'🏠',label:'Dashboard',page:'home'},
     {icon:'📋',label:'My Attendance',page:'attendance'},
+    {icon:'📊',label:'Analytics',page:'analytics'},
     {icon:'📅',label:'Timetable',page:'timetable'},
     {icon:'📢',label:'Notices',page:'notices'},
+    {sec:'Account'},
+    {icon:'🙍',label:'My Profile',page:'profile'},
   ],
   parent:[
     {icon:'🏠',label:'Dashboard',page:'home'},
     {icon:'📋',label:'Attendance',page:'attendance'},
     {icon:'📅',label:'Timetable',page:'timetable'},
     {icon:'📢',label:'Notices',page:'notices'},
+    {sec:'Account'},
+    {icon:'🙍',label:'My Profile',page:'profile'},
   ],
 };
 async function boot(){
@@ -537,7 +606,7 @@ function go(page,label){
   el('pg-title').textContent=label||page;
   setActiveNav(page);
   document.getElementById('sidebar').classList.remove('open');
-  const loaders={students:loadStudents,attendance:loadAttPage,timetable:loadTT,notices:loadNotices,users:loadUsers};
+  const loaders={students:loadStudents,attendance:loadAttPage,timetable:loadTT,notices:loadNotices,users:loadUsers,analytics:loadAnalytics,profile:loadProfile};
   if(loaders[page]) loaders[page]();
 }
 function setActiveNav(page){
@@ -675,6 +744,102 @@ function close_modal(id){el(id).classList.remove('open');}
 document.querySelectorAll('.overlay').forEach(o=>{o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open');});});
 function toast(msg){const t=document.createElement('div');t.className='toast';t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),3000);}
 function esc(s){if(!s)return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+// ── Analytics ──────────────────────────────────────────────────
+async function loadAnalytics(){
+  const cls = el('an-cls')?.value||'';
+  // populate class dropdown if empty
+  const anCls = el('an-cls');
+  if(anCls && anCls.options.length<=1){
+    const classes = await fetch('/api/classes').then(r=>r.json());
+    classes.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;anCls.appendChild(o);});
+  }
+  const data = await fetch('/api/attendance/history'+(cls?'?class='+cls:'')).then(r=>r.json());
+  historyCache = data;
+  const totalPresent = data.reduce((s,d)=>s+d.present,0);
+  const totalAbsent  = data.reduce((s,d)=>s+d.absent,0);
+  const totalSessions = data.length;
+  const avgPct = totalSessions ? Math.round(totalPresent/(totalPresent+totalAbsent||1)*100) : 0;
+  el('analytics-stats').innerHTML=[
+    {n:totalSessions,l:'Total Sessions',i:'📷'},
+    {n:totalPresent,l:'Total Present',i:'✅'},
+    {n:totalAbsent,l:'Total Absent',i:'❌'},
+    {n:avgPct+'%',l:'Avg Attendance',i:'📊'},
+  ].map(s=>`<div class="stat"><div style="font-size:1.4rem;margin-bottom:.35rem">${s.i}</div><div class="stat-num">${s.n}</div><div class="stat-lbl">${s.l}</div></div>`).join('');
+  // Bar chart — by class
+  const byClass={};
+  data.forEach(d=>{const k=d.class_name||'All';if(!byClass[k])byClass[k]={present:0,absent:0};byClass[k].present+=d.present;byClass[k].absent+=d.absent;});
+  const labels=Object.keys(byClass);
+  if(chartBar){chartBar.destroy();}
+  chartBar=new Chart(el('chart-bar'),{type:'bar',data:{labels,datasets:[
+    {label:'Present',data:labels.map(l=>byClass[l].present),backgroundColor:'rgba(21,128,61,.7)',borderRadius:3},
+    {label:'Absent', data:labels.map(l=>byClass[l].absent), backgroundColor:'rgba(192,57,43,.5)',borderRadius:3},
+  ]},options:{responsive:true,plugins:{legend:{position:'bottom'}},scales:{x:{grid:{display:false}},y:{beginAtZero:true}}}});
+  // Pie chart
+  if(chartPie){chartPie.destroy();}
+  chartPie=new Chart(el('chart-pie'),{type:'doughnut',data:{labels:['Present','Absent'],datasets:[{data:[totalPresent,totalAbsent],backgroundColor:['rgba(21,128,61,.75)','rgba(192,57,43,.6)'],borderWidth:2}]},options:{responsive:true,plugins:{legend:{position:'bottom'}}}});
+  // Line chart — last 10 sessions
+  const last10=data.slice(0,10).reverse();
+  if(chartLine){chartLine.destroy();}
+  chartLine=new Chart(el('chart-line'),{type:'line',data:{labels:last10.map(d=>d.date),datasets:[{label:'Present',data:last10.map(d=>d.present),borderColor:'rgba(21,128,61,.8)',backgroundColor:'rgba(21,128,61,.08)',tension:.35,fill:true},{label:'Absent',data:last10.map(d=>d.absent),borderColor:'rgba(192,57,43,.7)',backgroundColor:'rgba(192,57,43,.05)',tension:.35,fill:true}]},options:{responsive:true,plugins:{legend:{position:'bottom'}},scales:{x:{grid:{display:false}},y:{beginAtZero:true}}}});
+}
+
+// ── Export CSV ──────────────────────────────────────────────────
+async function exportCSV(){
+  const data = historyCache.length ? historyCache : await fetch('/api/attendance/history').then(r=>r.json());
+  const rows = [['Session','Class','Date','Present','Absent','Total']];
+  data.forEach(d=>rows.push([d.session_name,d.class_name||'All',d.date,d.present,d.absent,d.present+d.absent]));
+  const csv = rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
+  const a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download='attendance_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click();
+  toast('CSV downloaded!');
+}
+
+// ── Profile ─────────────────────────────────────────────────────
+async function loadProfile(){
+  const me = await fetch('/api/me').then(r=>r.json());
+  el('prof-av').textContent = me.name.charAt(0).toUpperCase();
+  el('prof-name').textContent = me.name;
+  el('prof-role').textContent = me.role.toUpperCase();
+  el('prof-name-inp').value = me.name;
+  el('prof-email-inp').value = '';
+  el('prof-class-inp').value = me.class||'';
+  // fetch full user details
+  try{
+    const users = await fetch('/api/users').then(r=>r.json());
+    const u = users.find(u=>u.id===me.id);
+    if(u) el('prof-email-inp').value = u.email;
+  }catch(e){}
+}
+async function saveProfile(){
+  const name=el('prof-name-inp').value.trim();
+  const email=el('prof-email-inp').value.trim();
+  const cls=el('prof-class-inp').value.trim();
+  if(!name||!email){toast('Name and email required');return;}
+  const r=await fetch('/api/profile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,email,class_name:cls})});
+  const d=await r.json();
+  if(d.error){toast(d.error);return;}
+  toast('Profile updated!');
+  el('sb-name').textContent=name;
+  el('sb-av').textContent=name.charAt(0).toUpperCase();
+  el('prof-name').textContent=name;
+  el('prof-av').textContent=name.charAt(0).toUpperCase();
+}
+async function changePassword(){
+  const old=el('pw-old').value;
+  const nw=el('pw-new').value;
+  const nw2=el('pw-new2').value;
+  if(!old||!nw||!nw2){toast('Please fill all password fields');return;}
+  if(nw.length<6){toast('New password must be at least 6 characters');return;}
+  if(nw!==nw2){toast('New passwords do not match');return;}
+  const r=await fetch('/api/change-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({old_password:old,new_password:nw})});
+  const d=await r.json();
+  if(d.error){toast(d.error);return;}
+  toast('Password updated!');
+  ['pw-old','pw-new','pw-new2'].forEach(i=>el(i).value='');
+}
+
 boot();
 </script>
 </body>
