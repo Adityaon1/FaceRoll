@@ -515,24 +515,40 @@ def del_timetable(tid):
 # ══════════════════════════════════════════════════════════════════════════════
 # STATS
 # ══════════════════════════════════════════════════════════════════════════════
-@app.route('/api/stats')
+@app.route('/api/profile', methods=['POST'])
 @login_required
-def stats():
-    conn=get_db()
-    d={
-        'students':      conn.execute('SELECT COUNT(*) FROM students').fetchone()[0],
-        'teachers':      conn.execute("SELECT COUNT(*) FROM users WHERE role='teacher'").fetchone()[0],
-        'sessions':      conn.execute('SELECT COUNT(*) FROM attendance_sessions').fetchone()[0],
-        'announcements': conn.execute('SELECT COUNT(*) FROM announcements').fetchone()[0],
-    }
-    conn.close(); return jsonify(d)
+def update_profile():
+    d = request.json
+    if not d.get('name') or not d.get('email'):
+        return jsonify({'error': 'Name and email required'}), 400
+    try:
+        conn = get_db()
+        conn.execute('UPDATE users SET name=?, email=?, class_name=? WHERE id=?',
+                     (d['name'], d['email'], d.get('class_name',''), session['user_id']))
+        conn.commit(); conn.close()
+        session['name'] = d['name']
+        session['class'] = d.get('class_name','')
+        return jsonify({'success': True})
+    except sqlite3.IntegrityError:
+        return jsonify({'error': 'Email already in use by another account'}), 409
 
-if __name__ == '__main__':
-    print('\n🎓 FaceRoll — School Portal')
-    print('   http://localhost:5000')
-    print('   Admin login: admin@school.com / admin123\n')
-    import os; port=int(os.environ.get('PORT',5000))
-    app.run(host='0.0.0.0',port=port,debug=True)
+@app.route('/api/change-password', methods=['POST'])
+@login_required
+def change_password():
+    d = request.json
+    if not d.get('old_password') or not d.get('new_password'):
+        return jsonify({'error': 'Both old and new passwords required'}), 400
+    if len(d['new_password']) < 6:
+        return jsonify({'error': 'New password must be at least 6 characters'}), 400
+    conn = get_db()
+    user = conn.execute('SELECT * FROM users WHERE id=? AND password=?',
+                        (session['user_id'], hash_pw(d['old_password']))).fetchone()
+    if not user:
+        conn.close(); return jsonify({'error': 'Current password is incorrect'}), 401
+    conn.execute('UPDATE users SET password=? WHERE id=?',
+                 (hash_pw(d['new_password']), session['user_id']))
+    conn.commit(); conn.close()
+    return jsonify({'success': True})
 
 @app.route('/forgot-password', methods=['GET'])
 def forgot_page(): return render_template('forgot.html')
@@ -554,3 +570,19 @@ def reset_password():
     conn.commit(); conn.close()
     return jsonify({'success': True})
 
+
+    conn=get_db()
+    d={
+        'students':      conn.execute('SELECT COUNT(*) FROM students').fetchone()[0],
+        'teachers':      conn.execute("SELECT COUNT(*) FROM users WHERE role='teacher'").fetchone()[0],
+        'sessions':      conn.execute('SELECT COUNT(*) FROM attendance_sessions').fetchone()[0],
+        'announcements': conn.execute('SELECT COUNT(*) FROM announcements').fetchone()[0],
+    }
+    conn.close(); return jsonify(d)
+
+if __name__ == '__main__':
+    print('\n🎓 FaceRoll — School Portal')
+    print('   http://localhost:5000')
+    print('   Admin login: admin@school.com / admin123\n')
+    import os; port=int(os.environ.get('PORT',5000))
+    app.run(host='0.0.0.0',port=port,debug=True)
