@@ -18,22 +18,31 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
 .card::before{content:'';display:block;width:40px;height:4px;background:linear-gradient(90deg,var(--red),var(--blue));margin-bottom:1.5rem;}
 .school-name{font-family:'Playfair Display',serif;font-size:2rem;font-weight:800;letter-spacing:-.03em;color:var(--ink);line-height:1;}
 .school-tag{font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.15em;font-family:'DM Mono',monospace;margin-top:.3rem;margin-bottom:2rem;}
+.steps{display:flex;align-items:center;gap:.4rem;margin-bottom:1.75rem;}
+.step-dot{width:24px;height:24px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:700;color:var(--muted);font-family:'DM Mono',monospace;flex-shrink:0;transition:all .3s;}
+.step-dot.active{background:var(--red);border-color:var(--red);color:#fff;}
+.step-dot.done{background:var(--green);border-color:var(--green);color:#fff;}
+.step-line{flex:1;height:1px;background:var(--border);}
 label{display:block;font-size:.68rem;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.35rem;}
 input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:2px;color:var(--ink);font-family:'DM Sans',sans-serif;font-size:.9rem;padding:.65rem .9rem;outline:none;transition:border-color .2s,box-shadow .2s;margin-bottom:1rem;}
 input:focus{border-color:var(--red);box-shadow:0 0 0 3px rgba(192,57,43,.1);}
 input::placeholder{color:var(--muted);}
+.code-input{font-family:'DM Mono',monospace;font-size:1.5rem;text-align:center;letter-spacing:.3em;}
 .btn{width:100%;background:var(--ink);color:#fff;border:none;border-radius:2px;padding:.8rem;font-family:'DM Sans',sans-serif;font-size:.9rem;font-weight:500;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:.5rem;margin-top:.25rem;}
 .btn:hover{background:var(--red);}
 .btn:disabled{opacity:.4;cursor:not-allowed;}
 .error{background:rgba(192,57,43,.07);border:1px solid rgba(192,57,43,.2);border-radius:2px;color:var(--red);font-size:.8rem;padding:.6rem .85rem;margin-bottom:1rem;display:none;}
 .success{background:rgba(21,128,61,.07);border:1px solid rgba(21,128,61,.25);border-radius:2px;color:var(--green);font-size:.85rem;padding:1rem .85rem;margin-bottom:1rem;display:none;text-align:center;}
 .success strong{display:block;font-size:1rem;margin-bottom:.25rem;}
+.info{background:rgba(29,78,216,.06);border:1px solid rgba(29,78,216,.18);border-radius:2px;color:var(--blue);font-size:.8rem;padding:.6rem .85rem;margin-bottom:1rem;}
 .back-link{text-align:center;margin-top:1.25rem;font-size:.8rem;color:var(--muted);}
 .back-link a{color:var(--ink);font-weight:500;text-decoration:underline;text-underline-offset:2px;}
 .back-link a:hover{color:var(--red);}
 .loader{width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg)}}
-.step{display:none;} .step.active{display:block;}
+.panel{display:none;} .panel.active{display:block;}
+.resend{font-size:.75rem;color:var(--muted);text-align:center;margin-top:.75rem;}
+.resend a{color:var(--ink);cursor:pointer;text-decoration:underline;text-underline-offset:2px;}
 </style>
 </head>
 <body>
@@ -42,20 +51,35 @@ input::placeholder{color:var(--muted);}
   <div class="card">
     <div class="school-name">FaceRoll</div>
     <div class="school-tag">School Portal · Reset Password</div>
-
+    <div class="steps">
+      <div class="step-dot active" id="sd1">1</div>
+      <div class="step-line"></div>
+      <div class="step-dot" id="sd2">2</div>
+      <div class="step-line"></div>
+      <div class="step-dot" id="sd3">3</div>
+    </div>
     <div class="error" id="err"></div>
     <div class="success" id="suc"><strong>Password reset!</strong>Redirecting to sign in…</div>
-
-    <!-- Step 1: enter email -->
-    <div class="step active" id="step1">
-      <p style="font-size:.85rem;color:var(--muted);margin-bottom:1.25rem;line-height:1.6">Enter your account email and choose a new password.</p>
+    <div class="panel active" id="p1">
+      <p style="font-size:.85rem;color:var(--muted);margin-bottom:1.25rem;line-height:1.6">Enter your account email and we'll send you a 6-digit verification code.</p>
       <label>Email Address</label>
-      <input id="email" type="email" placeholder="you@school.com">
+      <input id="email" type="email" placeholder="you@school.com" onkeydown="if(event.key==='Enter')sendCode()">
+      <button class="btn" id="btn1" onclick="sendCode()">Send Code →</button>
+    </div>
+    <div class="panel" id="p2">
+      <div class="info" id="sent-info">A 6-digit code was sent to your email.</div>
+      <label>Verification Code</label>
+      <input id="code" class="code-input" type="text" maxlength="6" placeholder="······" onkeydown="if(event.key==='Enter')verifyCode()">
+      <button class="btn" id="btn2" onclick="verifyCode()">Verify Code →</button>
+      <div class="resend">Didn't get it? <a onclick="sendCode(true)">Resend code</a></div>
+    </div>
+    <div class="panel" id="p3">
+      <p style="font-size:.85rem;color:var(--muted);margin-bottom:1.25rem;line-height:1.6">Code verified! Now choose a new password.</p>
       <label>New Password</label>
       <input id="pw" type="password" placeholder="Min. 6 characters">
       <label>Confirm New Password</label>
-      <input id="pw2" type="password" placeholder="Repeat new password" onkeydown="if(event.key==='Enter')reset()">
-      <button class="btn" id="btn" onclick="reset()">Reset Password →</button>
+      <input id="pw2" type="password" placeholder="Repeat new password" onkeydown="if(event.key==='Enter')doReset()">
+      <button class="btn" id="btn3" onclick="doReset()">Reset Password →</button>
     </div>
   </div>
   <div class="back-link">Remember your password? <a href="/login">Sign in</a></div>
@@ -64,28 +88,59 @@ input::placeholder{color:var(--muted);}
   </div>
 </div>
 <script>
-async function reset(){
-  const email=document.getElementById('email').value.trim();
+let userEmail='';
+function showErr(msg){const e=document.getElementById('err');e.textContent=msg;e.style.display='block';}
+function hideErr(){document.getElementById('err').style.display='none';}
+function setLoading(btnId,loading,label){const b=document.getElementById(btnId);b.innerHTML=loading?'<span class="loader"></span> Please wait…':label;b.disabled=loading;}
+function goStep(n){
+  ['p1','p2','p3'].forEach((id,i)=>document.getElementById(id).classList.toggle('active',i===n-1));
+  ['sd1','sd2','sd3'].forEach((id,i)=>{const d=document.getElementById(id);d.classList.remove('active','done');if(i<n-1)d.classList.add('done');else if(i===n-1)d.classList.add('active');});
+  hideErr();
+}
+async function sendCode(resend=false){
+  hideErr();
+  const email=resend?userEmail:document.getElementById('email').value.trim();
+  if(!email){showErr('Please enter your email address.');return;}
+  setLoading('btn1',true,'Send Code →');
+  try{
+    const r=await fetch('/api/send-reset-code',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
+    const d=await r.json();
+    if(d.error){showErr(d.error);setLoading('btn1',false,'Send Code →');return;}
+    userEmail=email;
+    document.getElementById('sent-info').textContent='A 6-digit code was sent to '+email;
+    setLoading('btn1',false,'Send Code →');
+    goStep(2);
+  }catch(e){showErr('Connection error.');setLoading('btn1',false,'Send Code →');}
+}
+async function verifyCode(){
+  hideErr();
+  const code=document.getElementById('code').value.trim();
+  if(code.length!==6){showErr('Please enter the 6-digit code.');return;}
+  setLoading('btn2',true,'Verify Code →');
+  try{
+    const r=await fetch('/api/verify-reset-code',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:userEmail,code})});
+    const d=await r.json();
+    if(d.error){showErr(d.error);setLoading('btn2',false,'Verify Code →');return;}
+    setLoading('btn2',false,'Verify Code →');
+    goStep(3);
+  }catch(e){showErr('Connection error.');setLoading('btn2',false,'Verify Code →');}
+}
+async function doReset(){
+  hideErr();
   const pw=document.getElementById('pw').value;
   const pw2=document.getElementById('pw2').value;
-  const err=document.getElementById('err');
-  const btn=document.getElementById('btn');
-  err.style.display='none';
-  if(!email||!pw||!pw2){err.textContent='Please fill in all fields.';err.style.display='block';return;}
-  if(pw.length<6){err.textContent='Password must be at least 6 characters.';err.style.display='block';return;}
-  if(pw!==pw2){err.textContent='Passwords do not match.';err.style.display='block';return;}
-  btn.innerHTML='<span class="loader"></span> Resetting…';btn.disabled=true;
+  if(!pw||!pw2){showErr('Please fill in both password fields.');return;}
+  if(pw.length<6){showErr('Password must be at least 6 characters.');return;}
+  if(pw!==pw2){showErr('Passwords do not match.');return;}
+  setLoading('btn3',true,'Reset Password →');
   try{
-    const r=await fetch('/api/reset-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,new_password:pw})});
+    const r=await fetch('/api/reset-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:userEmail,new_password:pw})});
     const d=await r.json();
-    if(d.error){err.textContent=d.error;err.style.display='block';btn.innerHTML='Reset Password →';btn.disabled=false;return;}
-    document.getElementById('step1').style.display='none';
+    if(d.error){showErr(d.error);setLoading('btn3',false,'Reset Password →');return;}
+    document.getElementById('p3').style.display='none';
     document.getElementById('suc').style.display='block';
     setTimeout(()=>window.location.href='/login',2200);
-  }catch(e){
-    err.textContent='Connection error.';err.style.display='block';
-    btn.innerHTML='Reset Password →';btn.disabled=false;
-  }
+  }catch(e){showErr('Connection error.');setLoading('btn3',false,'Reset Password →');}
 }
 </script>
 </body>

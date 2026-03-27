@@ -553,32 +553,86 @@ def change_password():
 @app.route('/forgot-password', methods=['GET'])
 def forgot_page(): return render_template('forgot.html')
 
+# In-memory store for reset codes: {email: {code, expires}}
+import random, time
+reset_codes = {}
+
+@app.route('/api/send-reset-code', methods=['POST'])
+def send_reset_code():
+    import smtplib
+    from email.mime.text import MIMEText
+    d = request.json
+    email = d.get('email','').strip().lower()
+    if not email:
+        return jsonify({'error': 'Email is required'}), 400
+    conn = get_db()
+    user = conn.execute('SELECT id,name FROM users WHERE LOWER(email)=?', (email,)).fetchone()
+    conn.close()
+    if not user:
+        return jsonify({'error': 'No account found with that email'}), 404
+    code = str(random.randint(100000, 999999))
+    reset_codes[email] = {'code': code, 'expires': time.time() + 600}  # 10 min
+    mail_user = os.environ.get('MAIL_EMAIL','')
+    mail_pass = os.environ.get('MAIL_PASSWORD','')
+    if not mail_user or not mail_pass:
+        return jsonify({'error': 'Email service not configured'}), 500
+    try:
+        msg = MIMEText(f"""Hello {user['name']},
+
+Your FaceRoll password reset code is:
+
+  {code}
+
+This code expires in 10 minutes. If you did not request this, ignore this email.
+
+— FaceRoll School Portal""")
+        msg['Subject'] = f'FaceRoll — Your Reset Code: {code}'
+        msg['From'] = mail_user
+        msg['To'] = email
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as s:
+            s.login(mail_user, mail_pass)
+            s.sendmail(mail_user, email, msg.as_string())
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': 'Failed to send email. Check server config.'}), 500
+
+@app.route('/api/verify-reset-code', methods=['POST'])
+def verify_reset_code():
+    d = request.json
+    email = d.get('email','').strip().lower()
+    code  = d.get('code','').strip()
+    entry = reset_codes.get(email)
+    if not entry:
+        return jsonify({'error': 'No code sent to this email. Please request a new one.'}), 400
+    if time.time() > entry['expires']:
+        del reset_codes[email]
+        return jsonify({'error': 'Code has expired. Please request a new one.'}), 400
+    if entry['code'] != code:
+        return jsonify({'error': 'Incorrect code. Please try again.'}), 400
+    entry['verified'] = True
+    return jsonify({'success': True})
+
 @app.route('/api/reset-password', methods=['POST'])
 def reset_password():
     d = request.json
-    email = d.get('email','').strip()
+    email  = d.get('email','').strip().lower()
     new_pw = d.get('new_password','')
     if not email or not new_pw:
         return jsonify({'error': 'Email and new password required'}), 400
     if len(new_pw) < 6:
         return jsonify({'error': 'Password must be at least 6 characters'}), 400
+    entry = reset_codes.get(email)
+    if not entry or not entry.get('verified'):
+        return jsonify({'error': 'Please verify your code first'}), 403
     conn = get_db()
-    user = conn.execute('SELECT id FROM users WHERE email=?', (email,)).fetchone()
+    user = conn.execute('SELECT id FROM users WHERE LOWER(email)=?', (email,)).fetchone()
     if not user:
         conn.close(); return jsonify({'error': 'No account found with that email'}), 404
-    conn.execute('UPDATE users SET password=? WHERE email=?', (hash_pw(new_pw), email))
+    conn.execute('UPDATE users SET password=? WHERE LOWER(email)=?', (hash_pw(new_pw), email))
     conn.commit(); conn.close()
+    del reset_codes[email]
     return jsonify({'success': True})
 
-
-    conn=get_db()
-    d={
-        'students':      conn.execute('SELECT COUNT(*) FROM students').fetchone()[0],
-        'teachers':      conn.execute("SELECT COUNT(*) FROM users WHERE role='teacher'").fetchone()[0],
-        'sessions':      conn.execute('SELECT COUNT(*) FROM attendance_sessions').fetchone()[0],
-        'announcements': conn.execute('SELECT COUNT(*) FROM announcements').fetchone()[0],
-    }
-    conn.close(); return jsonify(d)
 
 if __name__ == '__main__':
     print('\n🎓 FaceRoll — School Portal')
