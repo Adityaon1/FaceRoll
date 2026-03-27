@@ -107,7 +107,8 @@ input::placeholder{color:var(--muted);}
   </div>
 </div>
 <script>
-function setRole(r,label){
+let selectedRole="admin";
+function setRole(r,label){selectedRole=r;
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   event.target.classList.add('active');
 }
@@ -124,7 +125,7 @@ async function login(){
       body:JSON.stringify({email,password:pw})});
     const d=await r.json();
     if(d.error){err.textContent=d.error;err.style.display='block';btn.innerHTML='Sign In →';btn.disabled=false;return;}
-    window.location.href='/dashboard';
+    if(d.role !== selectedRole){err.textContent="This account is not registered as "+selectedRole+". Please select the correct role.";err.style.display="block";btn.innerHTML="Sign In →";btn.disabled=false;return;} window.location.href="/dashboard";
   }catch(e){
     err.textContent='Connection error — is the server running?';err.style.display='block';
     btn.innerHTML='Sign In →';btn.disabled=false;
