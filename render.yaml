@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: faceroll
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --timeout 120 --workers 1
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: MAIL_EMAIL
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false

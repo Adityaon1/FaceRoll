@@ -1,9 +1,21 @@
 from flask import Flask, request, jsonify, render_template, session, redirect
-import cv2, numpy as np, os, json, base64, hashlib, random, time
+import os, json, base64, hashlib, random, time
 from datetime import datetime, date
 from functools import wraps
 import smtplib
 from email.mime.text import MIMEText
+
+# Lazy-load cv2 and numpy only when face recognition is needed
+_cv2 = None
+_np = None
+def get_cv2():
+    global _cv2, _np
+    if _cv2 is None:
+        import cv2 as __cv2
+        import numpy as __np
+        _cv2 = __cv2
+        _np = __np
+    return _cv2, _np
 
 app = Flask(__name__)
 app.secret_key = "faceroll_piyush_secret_key_2025"
@@ -217,23 +229,34 @@ def roles(*allowed):
     return deco
 
 # ── Face recognition ──────────────────────────────────────────────────────────
-cascade_path = "/data/data/com.termux/files/usr/share/opencv4/haarcascades/haarcascade_frontalface_default.xml"
-if not os.path.exists(cascade_path):
-    cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-face_cascade = cv2.CascadeClassifier(cascade_path)
 FACE_SIZE = (100,100)
+_face_cascade = None
+
+def get_face_cascade():
+    global _face_cascade
+    if _face_cascade is None:
+        cv2, np = get_cv2()
+        cascade_path = "/data/data/com.termux/files/usr/share/opencv4/haarcascades/haarcascade_frontalface_default.xml"
+        if not os.path.exists(cascade_path):
+            cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+        _face_cascade = cv2.CascadeClassifier(cascade_path)
+    return _face_cascade
 
 def detect_faces_in_img(img):
+    cv2, np = get_cv2()
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    fc = get_face_cascade()
     for scale,nbrs in [(1.1,6),(1.05,4),(1.03,3)]:
-        faces = face_cascade.detectMultiScale(gray,scaleFactor=scale,minNeighbors=nbrs,minSize=(50,50))
+        faces = fc.detectMultiScale(gray,scaleFactor=scale,minNeighbors=nbrs,minSize=(50,50))
         if len(faces): return gray, faces
     return gray, np.array([])
 
 def preprocess_face(gray,x,y,w,h):
+    cv2, np = get_cv2()
     return cv2.GaussianBlur(cv2.equalizeHist(cv2.resize(gray[y:y+h,x:x+w],FACE_SIZE)),(3,3),0)
 
 def face_to_features(f):
+    cv2, np = get_cv2()
     hists=[]
     for s in [1,2,4]:
         h,w=f.shape; sh,sw=max(1,h//s),max(1,w//s)
@@ -245,6 +268,7 @@ def face_to_features(f):
     return np.concatenate(hists)
 
 def build_face_db(student_ids=None):
+    cv2, np = get_cv2()
     conn=get_db()
     if student_ids:
         ph=','.join(['%s' if USE_PG else '?']*len(student_ids))
@@ -262,6 +286,7 @@ def build_face_db(student_ids=None):
     return db
 
 def recognize_face(fg,db,thr=0.78):
+    cv2, np = get_cv2()
     if not db: return None,0.0
     feats=face_to_features(fg); scores={}
     for sid,_,df in db:
@@ -409,6 +434,7 @@ def upload_face(sid):
     s=fetchone(conn,'SELECT * FROM students WHERE id=?',(sid,))
     if not s: conn.close(); return jsonify({'error':'Not found'}),404
     existing=json.loads(s['face_images']); saved=0
+    cv2, np = get_cv2()
     for f in request.files.getlist('images'):
         arr=np.frombuffer(f.read(),np.uint8)
         img=cv2.imdecode(arr,cv2.IMREAD_COLOR)
@@ -441,6 +467,7 @@ def mark_attendance():
     class_name=request.form.get('class_name','')
     file=request.files.get('photo')
     if not file: return jsonify({'error':'No photo uploaded'}),400
+    cv2, np = get_cv2()
     arr=np.frombuffer(file.read(),np.uint8)
     img=cv2.imdecode(arr,cv2.IMREAD_COLOR)
     if img is None: return jsonify({'error':'Invalid image'}),400
@@ -480,6 +507,7 @@ def mark_attendance():
         WHERE ar.session_id=? ORDER BY s.name''',(sess_id,))
     conn.close()
     att=[{'name':r['name'],'roll':r['roll_number'],'status':r['status'],'confidence':r['confidence']} for r in records]
+    cv2, np = get_cv2()
     _,buf=cv2.imencode('.jpg',img_out,[cv2.IMWRITE_JPEG_QUALITY,82])
     return jsonify({'success':True,'faces_detected':int(len(faces_found)),'recognized':recognized,
                     'attendance':att,'present_count':len(marked),'total_students':len(students),
