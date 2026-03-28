@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template, session, redirect
+from flask import Flask, request, jsonify, render_template, session, redirect, send_from_directory
 import os, json, base64, hashlib, random, time
 from datetime import datetime, date
 from functools import wraps
@@ -305,6 +305,12 @@ def login_page(): return render_template('login.html')
 
 @app.route('/signup')
 def signup_page(): return render_template('signup.html')
+
+@app.route('/static/manifest.json')
+def manifest(): return send_from_directory('static','manifest.json',mimetype='application/manifest+json')
+
+@app.route('/static/sw.js')
+def sw(): return send_from_directory('static','sw.js',mimetype='application/javascript')
 
 @app.route('/forgot-password')
 def forgot_page(): return render_template('forgot.html')

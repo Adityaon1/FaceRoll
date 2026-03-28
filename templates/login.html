@@ -4,113 +4,134 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>FaceRoll — Sign In</title>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-:root{--bg:#f6f1e7;--card:#fffdf8;--border:#e5ddd0;--ink:#1c1710;--muted:#8a7d6b;--red:#c0392b;--blue:#1d4ed8}
-body{min-height:100vh;background:var(--bg);display:flex;align-items:center;justify-content:center;font-family:'DM Sans',sans-serif;padding:1rem;}
-/* subtle dot grid */
-body::before{content:'';position:fixed;inset:0;
-  background-image:radial-gradient(circle,rgba(28,23,16,.07) 1px,transparent 1px);
-  background-size:28px 28px;pointer-events:none;}
+:root{
+  --bg:#050810;--navy:#0d1b2a;--purple:#1a1a2e;
+  --indigo:#818cf8;--violet:#c084fc;--green:#00ff88;
+  --glass:rgba(255,255,255,.04);--glass-border:rgba(255,255,255,.08);
+  --muted:rgba(255,255,255,.3);--text:#fff;
+}
+body{min-height:100vh;background:var(--bg);display:flex;align-items:center;justify-content:center;
+  font-family:'Outfit',sans-serif;padding:1rem;position:relative;overflow:hidden;}
+/* Background blobs */
+body::before{content:'';position:fixed;top:-120px;right:-120px;width:500px;height:500px;
+  background:radial-gradient(circle,rgba(129,140,248,.12) 0%,transparent 65%);pointer-events:none;}
+body::after{content:'';position:fixed;bottom:-100px;left:-100px;width:400px;height:400px;
+  background:radial-gradient(circle,rgba(192,132,252,.08) 0%,transparent 65%);pointer-events:none;}
+.bg-dot{position:fixed;inset:0;
+  background-image:radial-gradient(rgba(255,255,255,.03) 1px,transparent 1px);
+  background-size:32px 32px;pointer-events:none;}
 
 .wrap{width:100%;max-width:420px;position:relative;z-index:1;}
 
-/* decorative rule */
-.rule{display:flex;align-items:center;gap:.75rem;margin-bottom:2rem;}
-.rule-line{flex:1;height:1px;background:var(--border);}
-.rule-diamond{width:8px;height:8px;background:var(--red);transform:rotate(45deg);flex-shrink:0;}
+.eyebrow{display:flex;align-items:center;gap:.6rem;margin-bottom:1.5rem;justify-content:center;}
+.eyebrow-line{flex:1;height:1px;background:linear-gradient(90deg,transparent,rgba(129,140,248,.3));}
+.eyebrow-line.r{background:linear-gradient(270deg,transparent,rgba(129,140,248,.3));}
+.eyebrow-text{font-family:'Space Mono',monospace;font-size:.52rem;color:rgba(129,140,248,.6);
+  text-transform:uppercase;letter-spacing:.2em;white-space:nowrap;}
 
-.card{background:var(--card);border:1px solid var(--border);border-radius:2px;padding:2.5rem;
-  box-shadow:4px 4px 0 rgba(28,23,16,.06);}
-.card::before{content:'';display:block;width:40px;height:4px;
-  background:linear-gradient(90deg,var(--red),var(--blue));margin-bottom:1.5rem;}
+.card{background:rgba(13,27,42,.7);border:1px solid var(--glass-border);border-radius:20px;
+  padding:2.25rem;backdrop-filter:blur(20px);
+  box-shadow:0 25px 60px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.06);}
 
-.school-name{font-family:'Playfair Display',serif;font-size:2rem;font-weight:800;
-  letter-spacing:-.03em;color:var(--ink);line-height:1;}
-.school-tag{font-size:.7rem;color:var(--muted);text-transform:uppercase;
-  letter-spacing:.15em;font-family:'DM Mono',monospace;margin-top:.3rem;margin-bottom:2rem;}
+.logo{font-family:'Syne',sans-serif;font-size:2.2rem;font-weight:800;line-height:1;
+  background:linear-gradient(135deg,#818cf8,#c084fc);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.tagline{font-family:'Space Mono',monospace;font-size:.58rem;color:var(--muted);
+  letter-spacing:.15em;text-transform:uppercase;margin-top:.25rem;margin-bottom:2rem;}
 
-.tabs{display:flex;gap:.25rem;margin-bottom:1.75rem;
-  background:var(--bg);border:1px solid var(--border);border-radius:2px;padding:.25rem;}
-.tab{flex:1;padding:.5rem;border:none;background:none;cursor:pointer;
-  font-family:'DM Sans',sans-serif;font-size:.8rem;border-radius:2px;
-  color:var(--muted);transition:all .2s;display:flex;align-items:center;justify-content:center;gap:.35rem;}
-.tab.active{background:var(--ink);color:#fff;}
+.tabs{display:flex;gap:.3rem;background:rgba(255,255,255,.04);border-radius:12px;padding:.3rem;margin-bottom:1.75rem;
+  border:1px solid var(--glass-border);}
+.tab{flex:1;padding:.45rem .3rem;border:none;background:none;cursor:pointer;border-radius:9px;
+  font-family:'Outfit',sans-serif;font-size:.72rem;color:var(--muted);transition:all .2s;
+  display:flex;align-items:center;justify-content:center;gap:.25rem;}
+.tab.active{background:rgba(129,140,248,.18);color:var(--indigo);
+  border:1px solid rgba(129,140,248,.25);box-shadow:0 0 16px rgba(129,140,248,.12);}
 
-label{display:block;font-size:.68rem;font-weight:500;color:var(--muted);
-  text-transform:uppercase;letter-spacing:.1em;margin-bottom:.35rem;}
-input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:2px;
-  color:var(--ink);font-family:'DM Sans',sans-serif;font-size:.9rem;
-  padding:.65rem .9rem;outline:none;transition:border-color .2s,box-shadow .2s;margin-bottom:1rem;}
-input:focus{border-color:var(--red);box-shadow:0 0 0 3px rgba(192,57,43,.1);}
-input::placeholder{color:var(--muted);}
+.field{margin-bottom:1.1rem;}
+label{display:block;font-family:'Space Mono',monospace;font-size:.55rem;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.12em;margin-bottom:.4rem;}
+input{width:100%;background:rgba(255,255,255,.05);border:1px solid var(--glass-border);
+  border-radius:10px;color:#fff;font-family:'Outfit',sans-serif;font-size:.9rem;
+  padding:.7rem 1rem;outline:none;transition:all .2s;}
+input:focus{border-color:rgba(129,140,248,.5);background:rgba(129,140,248,.05);
+  box-shadow:0 0 0 3px rgba(129,140,248,.1);}
+input::placeholder{color:rgba(255,255,255,.18);}
 
-.btn{width:100%;background:var(--ink);color:#fff;border:none;border-radius:2px;
-  padding:.8rem;font-family:'DM Sans',sans-serif;font-size:.9rem;font-weight:500;
-  cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:.5rem;
-  margin-top:.25rem;}
-.btn:hover{background:var(--red);}
-.btn:disabled{opacity:.4;cursor:not-allowed;}
+.error{background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:10px;
+  color:#f87171;font-size:.78rem;padding:.65rem 1rem;margin-bottom:1rem;display:none;}
 
-.error{background:rgba(192,57,43,.07);border:1px solid rgba(192,57,43,.2);border-radius:2px;
-  color:var(--red);font-size:.8rem;padding:.6rem .85rem;margin-bottom:1rem;display:none;}
+.btn{width:100%;background:linear-gradient(135deg,#818cf8,#c084fc);border:none;border-radius:10px;
+  color:#fff;font-family:'Syne',sans-serif;font-size:.9rem;font-weight:700;
+  padding:.85rem;cursor:pointer;transition:all .2s;margin-top:.25rem;letter-spacing:.03em;
+  box-shadow:0 4px 20px rgba(129,140,248,.3);display:flex;align-items:center;justify-content:center;gap:.5rem;}
+.btn:hover{transform:translateY(-1px);box-shadow:0 8px 28px rgba(129,140,248,.4);}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none;}
 
-.hint{margin-top:1.5rem;padding:1rem;background:rgba(28,23,16,.03);
-  border:1px dashed var(--border);border-radius:2px;}
-.hint-title{font-size:.68rem;font-weight:500;color:var(--muted);text-transform:uppercase;
-  letter-spacing:.1em;margin-bottom:.5rem;}
-.hint-row{display:flex;justify-content:space-between;font-size:.75rem;
-  font-family:'DM Mono',monospace;color:var(--ink);padding:.2rem 0;}
-.hint-row span{color:var(--muted);}
+.links{display:flex;justify-content:space-between;align-items:center;margin-top:1.25rem;}
+.link{font-family:'Space Mono',monospace;font-size:.58rem;color:var(--muted);cursor:pointer;}
+.link a{color:var(--indigo);text-decoration:none;}
+.link a:hover{color:var(--violet);}
 
-.loader{width:14px;height:14px;border:2px solid rgba(255,255,255,.3);
+.loader{width:14px;height:14px;border:2px solid rgba(255,255,255,.25);
   border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg)}}
 </style>
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#1c1710">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="FaceRoll">
+<script>if('serviceWorker' in navigator)navigator.serviceWorker.register('/static/sw.js');</script>
 </head>
 <body>
+<div class="bg-dot"></div>
 <div class="wrap">
-  <div class="rule"><div class="rule-line"></div><div class="rule-diamond"></div><div class="rule-line"></div></div>
+  <div class="eyebrow">
+    <div class="eyebrow-line"></div>
+    <div class="eyebrow-text">District CM SOE Portal</div>
+    <div class="eyebrow-line r"></div>
+  </div>
   <div class="card">
-    <div class="school-name">FaceRoll</div>
-    <div class="school-tag">DISTRICT CM SOE PORTAL · Sign In</div>
+    <div class="logo">FaceRoll</div>
+    <div class="tagline">Sign in to continue</div>
 
-    <!-- Role tabs (visual hint only) -->
     <div class="tabs">
-      <button class="tab active" onclick="setRole('admin','🔐 Admin')">🔐 Admin</button>
-      <button class="tab" onclick="setRole('teacher','👩‍🏫 Teacher')">👩‍🏫 Teacher</button>
-      <button class="tab" onclick="setRole('student','🎒 Student')">🎒 Student</button>
-      <button class="tab" onclick="setRole('parent','👪 Parent')">👪 Parent</button>
+      <button class="tab active" onclick="setRole(this,'admin')">🔐 Admin</button>
+      <button class="tab" onclick="setRole(this,'teacher')">👩‍🏫 Teacher</button>
+      <button class="tab" onclick="setRole(this,'student')">🎒 Student</button>
+      <button class="tab" onclick="setRole(this,'parent')">👪 Parent</button>
     </div>
 
     <div class="error" id="err"></div>
-    <div>
+
+    <div class="field">
       <label>Email Address</label>
       <input id="email" type="email" placeholder="you@school.com" autocomplete="email">
+    </div>
+    <div class="field">
       <label>Password</label>
-      <input id="pw" type="password" placeholder="••••••••"
-             onkeydown="if(event.key==='Enter')login()">
-      <button class="btn" id="btn" onclick="login()">Sign In →</button>
-      <div style="text-align:right;margin-top:.6rem;font-size:.78rem;">
-        <a href="/forgot-password" style="color:var(--muted);text-decoration:underline;text-underline-offset:2px;">Forgot password?</a>
-      </div>
+      <input id="pw" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')login()">
     </div>
 
+    <button class="btn" id="btn" onclick="login()">Sign In →</button>
 
+    <div class="links">
+      <span class="link"><a href="/forgot-password">Forgot password?</a></span>
+      <span class="link">No account? <a href="/signup">Register</a></span>
+    </div>
   </div>
-  <div style="text-align:center;margin-top:1rem;font-size:.8rem;color:var(--muted);">
-    Don't have an account? <a href="/signup" style="color:var(--ink);font-weight:500;text-decoration:underline;text-underline-offset:2px;">Create one</a>
-  </div>
-  <div style="text-align:center;margin-top:.75rem;font-size:.68rem;color:var(--muted);font-family:'DM Mono',monospace;letter-spacing:.08em;">
-    Developed by <strong style="color:var(--ink)">Piyush Kumar Pandey</strong>
+  <div style="text-align:center;margin-top:1.25rem;font-family:'Space Mono',monospace;font-size:.52rem;color:rgba(255,255,255,.15);letter-spacing:.08em;">
+    Developed by <strong style="color:rgba(129,140,248,.5)">Piyush Kumar Pandey</strong>
   </div>
 </div>
 <script>
-let selectedRole="admin";
-function setRole(r,label){selectedRole=r;
+let selectedRole='admin';
+function setRole(el,role){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-  event.target.classList.add('active');
+  el.classList.add('active'); selectedRole=role;
 }
 async function login(){
   const email=document.getElementById('email').value.trim();
@@ -125,7 +146,11 @@ async function login(){
       body:JSON.stringify({email,password:pw})});
     const d=await r.json();
     if(d.error){err.textContent=d.error;err.style.display='block';btn.innerHTML='Sign In →';btn.disabled=false;return;}
-    if(d.role !== selectedRole){err.textContent="This account is not registered as "+selectedRole+". Please select the correct role.";err.style.display="block";btn.innerHTML="Sign In →";btn.disabled=false;return;} window.location.href="/dashboard";
+    if(d.role!==selectedRole){
+      err.textContent='This account is not registered as '+selectedRole+'. Please select the correct role.';
+      err.style.display='block';btn.innerHTML='Sign In →';btn.disabled=false;return;
+    }
+    window.location.href='/dashboard';
   }catch(e){
     err.textContent='Connection error — is the server running?';err.style.display='block';
     btn.innerHTML='Sign In →';btn.disabled=false;
