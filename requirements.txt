@@ -3,3 +3,4 @@ opencv-python-headless
 numpy
 psycopg2-binary
 gunicorn
+face_recognition

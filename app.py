@@ -228,73 +228,103 @@ def roles(*allowed):
         return dec
     return deco
 
-# ── Face recognition ──────────────────────────────────────────────────────────
-FACE_SIZE = (100,100)
-_face_cascade = None
+# ── Face recognition (AI-powered via face_recognition library) ────────────────
+_fr = None
 
-def get_face_cascade():
-    global _face_cascade
-    if _face_cascade is None:
-        cv2, np = get_cv2()
-        cascade_path = "/data/data/com.termux/files/usr/share/opencv4/haarcascades/haarcascade_frontalface_default.xml"
-        if not os.path.exists(cascade_path):
-            cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-        _face_cascade = cv2.CascadeClassifier(cascade_path)
-    return _face_cascade
+def get_fr():
+    global _fr
+    if _fr is None:
+        import face_recognition as __fr
+        _fr = __fr
+    return _fr
 
-def detect_faces_in_img(img):
-    cv2, np = get_cv2()
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    fc = get_face_cascade()
-    for scale,nbrs in [(1.1,6),(1.05,4),(1.03,3)]:
-        faces = fc.detectMultiScale(gray,scaleFactor=scale,minNeighbors=nbrs,minSize=(50,50))
-        if len(faces): return gray, faces
-    return gray, np.array([])
+def detect_and_encode(image_path):
+    """Load image and return face encodings."""
+    fr = get_fr()
+    import cv2 as cv
+    img = cv.imread(image_path)
+    if img is None: return []
+    rgb = cv.cvtColor(img, cv.COLOR_BGR2RGB)
+    locations = fr.face_locations(rgb, model='hog')
+    encodings = fr.face_encodings(rgb, locations)
+    return encodings
 
-def preprocess_face(gray,x,y,w,h):
-    cv2, np = get_cv2()
-    return cv2.GaussianBlur(cv2.equalizeHist(cv2.resize(gray[y:y+h,x:x+w],FACE_SIZE)),(3,3),0)
-
-def face_to_features(f):
-    cv2, np = get_cv2()
-    hists=[]
-    for s in [1,2,4]:
-        h,w=f.shape; sh,sw=max(1,h//s),max(1,w//s)
-        for r in range(s):
-            for c in range(s):
-                cell=f[r*sh:(r+1)*sh,c*sw:(c+1)*sw]
-                hist=cv2.normalize(cv2.calcHist([cell],[0],None,[32],[0,256]),None).flatten()
-                hists.append(hist)
-    return np.concatenate(hists)
+def encode_from_bytes(file_bytes):
+    """Detect and encode faces from uploaded image bytes."""
+    fr = get_fr()
+    import numpy as _np
+    import cv2 as cv
+    arr = _np.frombuffer(file_bytes, _np.uint8)
+    img = cv.imdecode(arr, cv.IMREAD_COLOR)
+    if img is None: return [], []
+    rgb = cv.cvtColor(img, cv.COLOR_BGR2RGB)
+    locations = fr.face_locations(rgb, model='hog')
+    encodings = fr.face_encodings(rgb, locations)
+    return locations, encodings
 
 def build_face_db(student_ids=None):
-    cv2, np = get_cv2()
-    conn=get_db()
+    """Build database of known face encodings."""
+    conn = get_db()
     if student_ids:
-        ph=','.join(['%s' if USE_PG else '?']*len(student_ids))
-        rows=fetchall(conn, f'SELECT id,name,face_images FROM students WHERE id IN ({ph})', student_ids)
+        ph = ','.join(['%s' if USE_PG else '?']*len(student_ids))
+        rows = fetchall(conn, f'SELECT id,name,face_images FROM students WHERE id IN ({ph})', student_ids)
     else:
-        rows=fetchall(conn,'SELECT id,name,face_images FROM students')
+        rows = fetchall(conn, 'SELECT id,name,face_images FROM students')
     conn.close()
-    db=[]
+    db = []
     for s in rows:
         for p in json.loads(s['face_images']):
             if not os.path.exists(p): continue
-            img=cv2.imread(p,cv2.IMREAD_GRAYSCALE)
-            if img is None: continue
-            db.append((s['id'],s['name'],face_to_features(cv2.equalizeHist(cv2.resize(img,FACE_SIZE)))))
+            encs = detect_and_encode(p)
+            for enc in encs:
+                db.append((s['id'], s['name'], enc))
     return db
 
-def recognize_face(fg,db,thr=0.78):
-    cv2, np = get_cv2()
-    if not db: return None,0.0
-    feats=face_to_features(fg); scores={}
-    for sid,_,df in db:
-        d=np.dot(feats,df); n=np.linalg.norm(feats)*np.linalg.norm(df)
-        scores.setdefault(sid,[]).append(float(d/n) if n else 0.0)
-    avg={sid:float(np.mean(v)) for sid,v in scores.items()}
-    best=max(avg,key=avg.get)
-    return (best,avg[best]) if avg[best]>=thr else (None,avg[best])
+def recognize_faces_in_image(file_bytes, face_db, tolerance=0.5):
+    """Recognize faces in classroom photo. Returns list of (sid, name, location)."""
+    if not face_db: return [], []
+    fr = get_fr()
+    import numpy as _np
+    import cv2 as cv
+
+    arr = _np.frombuffer(file_bytes, _np.uint8)
+    img = cv.imdecode(arr, cv.IMREAD_COLOR)
+    if img is None: return img, []
+
+    rgb = cv.cvtColor(img, cv.COLOR_BGR2RGB)
+    locations = fr.face_locations(rgb, model='hog')
+    encodings = fr.face_encodings(rgb, locations)
+
+    known_encs = [d[2] for d in face_db]
+    known_ids  = [d[0] for d in face_db]
+    known_names= [d[1] for d in face_db]
+
+    results = []
+    for enc, loc in zip(encodings, locations):
+        matches = fr.compare_faces(known_encs, enc, tolerance=tolerance)
+        distances = fr.face_distance(known_encs, enc)
+        if True in matches:
+            best_idx = int(_np.argmin(distances))
+            if matches[best_idx]:
+                confidence = round((1 - distances[best_idx]) * 100, 1)
+                results.append({
+                    'sid': known_ids[best_idx],
+                    'name': known_names[best_idx],
+                    'location': loc,
+                    'confidence': confidence
+                })
+                # Draw green box
+                top,right,bottom,left = loc
+                cv.rectangle(img,(left,top),(right,bottom),(52,211,153),2)
+                cv.putText(img,known_names[best_idx].split()[0],(left,top-8),
+                           cv.FONT_HERSHEY_SIMPLEX,0.5,(52,211,153),2)
+            else:
+                top,right,bottom,left = loc
+                cv.rectangle(img,(left,top),(right,bottom),(59,130,246),2)
+        else:
+            top,right,bottom,left = loc
+            cv.rectangle(img,(left,top),(right,bottom),(59,130,246),2)
+    return img, results
 
 # ── Pages ─────────────────────────────────────────────────────────────────────
 @app.route('/')
@@ -440,18 +470,18 @@ def upload_face(sid):
     s=fetchone(conn,'SELECT * FROM students WHERE id=?',(sid,))
     if not s: conn.close(); return jsonify({'error':'Not found'}),404
     existing=json.loads(s['face_images']); saved=0
-    cv2, np = get_cv2()
+    import cv2 as _cv2, numpy as _np
     for f in request.files.getlist('images'):
-        arr=np.frombuffer(f.read(),np.uint8)
-        img=cv2.imdecode(arr,cv2.IMREAD_COLOR)
+        file_bytes = f.read()
+        arr = _np.frombuffer(file_bytes, _np.uint8)
+        img = _cv2.imdecode(arr, _cv2.IMREAD_COLOR)
         if img is None: continue
-        gray,faces=detect_faces_in_img(img)
-        if not len(faces): continue
-        x,y,w,h=faces[0]
-        fi=preprocess_face(gray,x,y,w,h)
-        ts=datetime.now().strftime('%Y%m%d%H%M%S%f')
-        fname=f'{KNOWN_FACES_DIR}/s{sid}_{len(existing)+saved}_{ts}.png'
-        cv2.imwrite(fname,fi); existing.append(fname); saved+=1
+        # Check face exists using face_recognition
+        locs, encs = encode_from_bytes(file_bytes)
+        if not encs: continue
+        ts = datetime.now().strftime('%Y%m%d%H%M%S%f')
+        fname = f'{KNOWN_FACES_DIR}/s{sid}_{len(existing)+saved}_{ts}.png'
+        _cv2.imwrite(fname, img); existing.append(fname); saved+=1
     execute(conn,'UPDATE students SET face_images=? WHERE id=?',(json.dumps(existing),sid))
     conn.commit(); conn.close()
     if not saved: return jsonify({'error':'No clear face detected. Use a well-lit, front-facing photo.'}),400
@@ -473,10 +503,7 @@ def mark_attendance():
     class_name=request.form.get('class_name','')
     file=request.files.get('photo')
     if not file: return jsonify({'error':'No photo uploaded'}),400
-    cv2, np = get_cv2()
-    arr=np.frombuffer(file.read(),np.uint8)
-    img=cv2.imdecode(arr,cv2.IMREAD_COLOR)
-    if img is None: return jsonify({'error':'Invalid image'}),400
+    file_bytes = file.read()
     conn=get_db()
     students=(fetchall(conn,'SELECT * FROM students WHERE class_name=?',(class_name,))
               if class_name else fetchall(conn,'SELECT * FROM students'))
@@ -485,37 +512,33 @@ def mark_attendance():
         conn.close(); return jsonify({'error':'No face photos uploaded yet.'}),400
     sids=[s['id'] for s in students]
     face_db=build_face_db(sids)
-    gray,faces_found=detect_faces_in_img(img)
+    if not face_db: conn.close(); return jsonify({'error':'No face encodings found. Re-upload student photos.'}),400
     cur=execute(conn,'INSERT INTO attendance_sessions (session_name,class_name,teacher_id,date) VALUES (?,?,?,?)',
                 (sess_name,class_name,session['user_id'],date.today().isoformat()))
     sess_id=lastrowid(conn,cur); conn.commit()
     for sid in sids:
         execute(conn,'INSERT INTO attendance_records (session_id,student_id,status) VALUES (?,?,?)',(sess_id,sid,'absent'))
     conn.commit()
-    marked,recognized=[],[]
-    img_out=img.copy()
-    for(x,y,w,h) in faces_found:
-        fg=preprocess_face(gray,x,y,w,h)
-        sid,score=recognize_face(fg,face_db)
-        if sid and sid in sids and sid not in marked:
+    img_out, results = recognize_faces_in_image(file_bytes, face_db)
+    marked=[]
+    recognized=[]
+    for r in results:
+        sid=r['sid']
+        if sid in sids and sid not in marked:
             execute(conn,'UPDATE attendance_records SET status=?,confidence=? WHERE session_id=? AND student_id=?',
-                    ('present',float(score),sess_id,sid))
+                    ('present',float(r['confidence']),sess_id,sid))
             s=fetchone(conn,'SELECT name,roll_number FROM students WHERE id=?',(sid,))
-            recognized.append({'name':s['name'],'roll':s['roll_number'],'confidence':round(score*100,1)})
+            recognized.append({'name':s['name'],'roll':s['roll_number'],'confidence':r['confidence']})
             marked.append(sid)
-            cv2.rectangle(img_out,(x,y),(x+w,y+h),(52,211,153),2)
-            cv2.putText(img_out,s['name'].split()[0],(x,y-8),cv2.FONT_HERSHEY_SIMPLEX,0.5,(52,211,153),2)
-        else:
-            cv2.rectangle(img_out,(x,y),(x+w,y+h),(59,130,246),2)
     conn.commit()
     records=fetchall(conn,'''SELECT s.name,s.roll_number,ar.status,ar.confidence
         FROM attendance_records ar JOIN students s ON s.id=ar.student_id
         WHERE ar.session_id=? ORDER BY s.name''',(sess_id,))
     conn.close()
     att=[{'name':r['name'],'roll':r['roll_number'],'status':r['status'],'confidence':r['confidence']} for r in records]
-    cv2, np = get_cv2()
-    _,buf=cv2.imencode('.jpg',img_out,[cv2.IMWRITE_JPEG_QUALITY,82])
-    return jsonify({'success':True,'faces_detected':int(len(faces_found)),'recognized':recognized,
+    import cv2 as _cv
+    _,buf=_cv.imencode('.jpg',img_out,[_cv.IMWRITE_JPEG_QUALITY,82])
+    return jsonify({'success':True,'faces_detected':len(results),'recognized':recognized,
                     'attendance':att,'present_count':len(marked),'total_students':len(students),
                     'annotated_image':'data:image/jpeg;base64,'+base64.b64encode(buf).decode()})
 
