@@ -675,35 +675,51 @@ async function uploadFaces(){
   const files=el('face-files').files;
   if(!files.length){toast('Select at least one photo');return;}
   const btn=document.querySelector('#m-face .btn-ink');
-  btn.innerHTML='<span class="spin spin-w"></span> Uploading…';btn.disabled=true;
-  let saved=0, failed=0;
+  btn.innerHTML='<span class="spin spin-w"></span> Loading AI…';btn.disabled=true;
+  try{
+    await loadFaceApiModels();
+  }catch(e){toast('Failed to load AI models. Check internet connection.');btn.innerHTML='Upload';btn.disabled=false;return;}
+  let saved=0;
   for(let i=0;i<files.length;i++){
-    btn.innerHTML=`<span class="spin spin-w"></span> Processing ${i+1}/${files.length}…`;
-    const fd=new FormData();fd.append('images',files[i]);
+    btn.innerHTML=`<span class="spin spin-w"></span> Scanning ${i+1}/${files.length}…`;
     try{
-      const r=await fetch('/api/students/'+faceSid+'/face',{method:'POST',body:fd});
+      const img=await faceapi.bufferToImage(files[i]);
+      const detection=await faceapi.detectSingleFace(img,new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
+      if(!detection){continue;}
+      const descriptor=Array.from(detection.descriptor);
+      const r=await fetch('/api/students/'+faceSid+'/descriptor',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({descriptor})});
       const d=await r.json();
-      if(d.error) failed++;
-      else saved+=d.saved||0;
-    }catch(e){failed++;}
+      if(!d.error) saved++;
+    }catch(e){console.error(e);}
   }
   btn.innerHTML='Upload';btn.disabled=false;
-  if(saved>0){toast(saved+' face photo'+(saved!==1?'s':'')+' saved!');close_modal('m-face');loadStudents();}
-  else{toast('No clear faces detected. Try well-lit front-facing photos.');}
+  if(saved>0){toast(saved+' face'+(saved!==1?'s':'')+' saved with AI!');close_modal('m-face');loadStudents();}
+  else{toast('No faces detected. Use clear, well-lit front-facing photos.');}
 }
 function loadAttPage(){loadHistory();if(ME.role==='student')loadMyAtt();}
 function previewPhoto(inp){const img=el('att-prev');if(inp.files[0]){img.src=URL.createObjectURL(inp.files[0]);img.style.display='block';}}
 async function markAtt(){
   const photo=el('att-photo').files[0];
   if(!photo){toast('Please upload a classroom photo');return;}
-  const btn=el('mark-btn');btn.innerHTML='<span class="spin"></span> Processing…';btn.disabled=true;
-  const fd=new FormData();fd.append('photo',photo);fd.append('session_name',el('sess-name').value||'Session '+new Date().toLocaleDateString());fd.append('class_name',el('att-cls').value);
-  const r=await fetch('/api/attendance/mark',{method:'POST',body:fd});
-  const d=await r.json();btn.innerHTML='✦ Run Attendance';btn.disabled=false;
-  if(d.error){toast(d.error);return;}
-  const rc=el('att-res');rc.style.display='block';
-  el('att-res-body').innerHTML=`<div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.85rem"><span class="badge b-teacher">🔍 ${d.faces_detected} detected</span><span class="badge b-present">✓ ${d.present_count} present</span><span class="badge b-absent">✕ ${d.total_students-d.present_count} absent</span></div>${d.annotated_image?`<img src="${d.annotated_image}" style="width:100%;border-radius:8px;border:1px solid var(--border);margin-bottom:.85rem">`:''}${d.attendance.map(a=>`<div style="display:flex;align-items:center;gap:.6rem;padding:.55rem 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:.82rem"><span class="badge ${a.status==='present'?'b-present':'b-absent'}">${a.status}</span><div style="flex:1"><div style="font-weight:500;color:#fff">${esc(a.name)}</div><div style="font-size:.68rem;color:var(--muted);font-family:'Space Mono',monospace">${esc(a.roll)}</div></div>${a.status==='present'?`<div class="bar-wrap" style="max-width:70px"><div class="bar" style="width:${Math.max(10,(a.confidence||0))}%;background:var(--green)"></div></div>`:''}</div>`).join('')}`;
-  toast('Done! '+d.present_count+' present, '+(d.total_students-d.present_count)+' absent.');loadHistory();
+  const btn=el('mark-btn');btn.innerHTML='<span class="spin spin-w"></span> Loading AI…';btn.disabled=true;
+  try{ await loadFaceApiModels(); }
+  catch(e){toast('Failed to load AI models.');btn.innerHTML='✦ Run Attendance';btn.disabled=false;return;}
+  btn.innerHTML='<span class="spin spin-w"></span> Detecting faces…';
+  try{
+    const img=await faceapi.bufferToImage(photo);
+    const detections=await faceapi.detectAllFaces(img,new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptors();
+    if(!detections.length){toast('No faces detected in photo. Try a clearer image.');btn.innerHTML='✦ Run Attendance';btn.disabled=false;return;}
+    btn.innerHTML=`<span class="spin spin-w"></span> Recognizing ${detections.length} face(s)…`;
+    const descriptors=detections.map(d=>Array.from(d.descriptor));
+    const r=await fetch('/api/attendance/recognize',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({descriptors,session_name:el('sess-name').value||'Session '+new Date().toLocaleDateString(),class_name:el('att-cls').value})});
+    const d=await r.json();
+    btn.innerHTML='✦ Run Attendance';btn.disabled=false;
+    if(d.error){toast(d.error);return;}
+    const rc=el('att-res');rc.style.display='block';
+    el('att-res-body').innerHTML=`<div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.85rem"><span class="badge b-teacher">🔍 ${d.faces_detected} detected</span><span class="badge b-present">✓ ${d.present_count} present</span><span class="badge b-absent">✕ ${d.total_students-d.present_count} absent</span></div>${d.attendance.map(a=>`<div style="display:flex;align-items:center;gap:.6rem;padding:.55rem 0;border-bottom:1px solid var(--border);font-size:.82rem"><span class="badge ${a.status==='present'?'b-present':'b-absent'}">${a.status}</span><div style="flex:1"><div style="font-weight:500">${esc(a.name)}</div><div style="font-size:.68rem;color:var(--muted);font-family:'DM Mono',monospace">${esc(a.roll)}</div></div>${a.status==='present'?`<span style="font-size:.65rem;color:var(--green)">${a.confidence}%</span>`:''}</div>`).join('')}`;
+    toast('Done! '+d.present_count+' present, '+(d.total_students-d.present_count)+' absent.');loadHistory();
+  }catch(e){toast('Error: '+e.message);btn.innerHTML='✦ Run Attendance';btn.disabled=false;}
 }
 async function loadHistory(){
   const cls=el('hist-cls')?.value||'';
@@ -833,5 +849,22 @@ function toast(msg){const t=document.createElement('div');t.className='toast';t.
 function esc(s){if(!s)return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 boot();
 </script>
+
+<!-- FaceAPI.js - AI face recognition in browser -->
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+<script>
+let faceModelsLoaded = false;
+async function loadFaceApiModels() {
+  if (faceModelsLoaded) return;
+  const MODEL_URL = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights';
+  await Promise.all([
+    faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+    faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL),
+    faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
+  ]);
+  faceModelsLoaded = true;
+}
+</script>
+
 </body>
 </html>

@@ -115,6 +115,7 @@ def init_db():
                 roll_number TEXT UNIQUE NOT NULL,
                 class_name TEXT,
                 face_images TEXT DEFAULT '[]',
+            face_descriptors TEXT DEFAULT '[]',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )""",
             """CREATE TABLE IF NOT EXISTS attendance_sessions (
@@ -167,7 +168,8 @@ def init_db():
             CREATE TABLE IF NOT EXISTS students (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,
                 roll_number TEXT UNIQUE NOT NULL, class_name TEXT,
-                face_images TEXT DEFAULT '[]', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+                face_images TEXT DEFAULT '[]',
+            face_descriptors TEXT DEFAULT '[]', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
             CREATE TABLE IF NOT EXISTS attendance_sessions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT, session_name TEXT,
                 class_name TEXT, teacher_id INTEGER, date TEXT,
@@ -206,6 +208,15 @@ def init_db():
             ('10-B','Monday',1,'English','Ms. Priya','08:00','08:45'),
         ])
         conn.commit()
+    # Migrate: add face_descriptors column if missing
+    try:
+        if USE_PG:
+            execute(conn, "ALTER TABLE students ADD COLUMN IF NOT EXISTS face_descriptors TEXT DEFAULT '[]'")
+        else:
+            execute(conn, "ALTER TABLE students ADD COLUMN face_descriptors TEXT DEFAULT '[]'")
+        conn.commit()
+    except Exception:
+        pass
     conn.close()
 
 init_db()
@@ -228,103 +239,46 @@ def roles(*allowed):
         return dec
     return deco
 
-# ── Face recognition (AI-powered via face_recognition library) ────────────────
-_fr = None
+# ── Face recognition (descriptors computed by FaceAPI.js in browser) ──────────
+import struct
 
-def get_fr():
-    global _fr
-    if _fr is None:
-        import face_recognition as __fr
-        _fr = __fr
-    return _fr
-
-def detect_and_encode(image_path):
-    """Load image and return face encodings."""
-    fr = get_fr()
-    import cv2 as cv
-    img = cv.imread(image_path)
-    if img is None: return []
-    rgb = cv.cvtColor(img, cv.COLOR_BGR2RGB)
-    locations = fr.face_locations(rgb, model='hog')
-    encodings = fr.face_encodings(rgb, locations)
-    return encodings
-
-def encode_from_bytes(file_bytes):
-    """Detect and encode faces from uploaded image bytes."""
-    fr = get_fr()
-    import numpy as _np
-    import cv2 as cv
-    arr = _np.frombuffer(file_bytes, _np.uint8)
-    img = cv.imdecode(arr, cv.IMREAD_COLOR)
-    if img is None: return [], []
-    rgb = cv.cvtColor(img, cv.COLOR_BGR2RGB)
-    locations = fr.face_locations(rgb, model='hog')
-    encodings = fr.face_encodings(rgb, locations)
-    return locations, encodings
+def euclidean_distance(a, b):
+    """Compare two 128-d face descriptors."""
+    import math
+    return math.sqrt(sum((x-y)**2 for x,y in zip(a,b)))
 
 def build_face_db(student_ids=None):
-    """Build database of known face encodings."""
+    """Build database of known face descriptors stored as JSON."""
     conn = get_db()
     if student_ids:
         ph = ','.join(['%s' if USE_PG else '?']*len(student_ids))
-        rows = fetchall(conn, f'SELECT id,name,face_images FROM students WHERE id IN ({ph})', student_ids)
+        rows = fetchall(conn, f'SELECT id,name,face_descriptors FROM students WHERE id IN ({ph})', student_ids)
     else:
-        rows = fetchall(conn, 'SELECT id,name,face_images FROM students')
+        rows = fetchall(conn, 'SELECT id,name,face_descriptors FROM students')
     conn.close()
     db = []
     for s in rows:
-        for p in json.loads(s['face_images']):
-            if not os.path.exists(p): continue
-            encs = detect_and_encode(p)
-            for enc in encs:
-                db.append((s['id'], s['name'], enc))
+        descriptors = json.loads(s['face_descriptors'] or '[]')
+        for desc in descriptors:
+            db.append((s['id'], s['name'], desc))
     return db
 
-def recognize_faces_in_image(file_bytes, face_db, tolerance=0.5):
-    """Recognize faces in classroom photo. Returns list of (sid, name, location)."""
-    if not face_db: return [], []
-    fr = get_fr()
-    import numpy as _np
-    import cv2 as cv
-
-    arr = _np.frombuffer(file_bytes, _np.uint8)
-    img = cv.imdecode(arr, cv.IMREAD_COLOR)
-    if img is None: return img, []
-
-    rgb = cv.cvtColor(img, cv.COLOR_BGR2RGB)
-    locations = fr.face_locations(rgb, model='hog')
-    encodings = fr.face_encodings(rgb, locations)
-
-    known_encs = [d[2] for d in face_db]
-    known_ids  = [d[0] for d in face_db]
-    known_names= [d[1] for d in face_db]
-
-    results = []
-    for enc, loc in zip(encodings, locations):
-        matches = fr.compare_faces(known_encs, enc, tolerance=tolerance)
-        distances = fr.face_distance(known_encs, enc)
-        if True in matches:
-            best_idx = int(_np.argmin(distances))
-            if matches[best_idx]:
-                confidence = round((1 - distances[best_idx]) * 100, 1)
-                results.append({
-                    'sid': known_ids[best_idx],
-                    'name': known_names[best_idx],
-                    'location': loc,
-                    'confidence': confidence
-                })
-                # Draw green box
-                top,right,bottom,left = loc
-                cv.rectangle(img,(left,top),(right,bottom),(52,211,153),2)
-                cv.putText(img,known_names[best_idx].split()[0],(left,top-8),
-                           cv.FONT_HERSHEY_SIMPLEX,0.5,(52,211,153),2)
-            else:
-                top,right,bottom,left = loc
-                cv.rectangle(img,(left,top),(right,bottom),(59,130,246),2)
-        else:
-            top,right,bottom,left = loc
-            cv.rectangle(img,(left,top),(right,bottom),(59,130,246),2)
-    return img, results
+def recognize_descriptor(descriptor, face_db, threshold=0.5):
+    """Find best match for a face descriptor."""
+    if not face_db: return None, 1.0
+    best_sid, best_name, best_dist = None, None, threshold
+    scores = {}
+    for sid, name, known_desc in face_db:
+        dist = euclidean_distance(descriptor, known_desc)
+        if sid not in scores or dist < scores[sid][0]:
+            scores[sid] = (dist, name)
+    for sid, (dist, name) in scores.items():
+        if dist < best_dist:
+            best_dist = dist
+            best_sid = sid
+            best_name = name
+    confidence = round((1 - best_dist) * 100, 1) if best_sid else 0
+    return best_sid, confidence
 
 # ── Pages ─────────────────────────────────────────────────────────────────────
 @app.route('/')
@@ -541,6 +495,62 @@ def mark_attendance():
     return jsonify({'success':True,'faces_detected':len(results),'recognized':recognized,
                     'attendance':att,'present_count':len(marked),'total_students':len(students),
                     'annotated_image':'data:image/jpeg;base64,'+base64.b64encode(buf).decode()})
+
+
+@app.route('/api/students/<int:sid>/descriptor', methods=['POST'])
+@login_required
+@roles('admin','teacher')
+def save_descriptor(sid):
+    d = request.json
+    descriptor = d.get('descriptor')
+    if not descriptor or len(descriptor) != 128:
+        return jsonify({'error': 'Invalid face descriptor'}), 400
+    conn = get_db()
+    s = fetchone(conn, 'SELECT * FROM students WHERE id=?', (sid,))
+    if not s: conn.close(); return jsonify({'error': 'Student not found'}), 404
+    existing = json.loads(s['face_descriptors'] or '[]')
+    existing.append(descriptor)
+    execute(conn, 'UPDATE students SET face_descriptors=? WHERE id=?', (json.dumps(existing), sid))
+    conn.commit(); conn.close()
+    return jsonify({'success': True, 'total': len(existing)})
+
+@app.route('/api/attendance/recognize', methods=['POST'])
+@login_required
+@roles('admin','teacher')
+def recognize_from_descriptors():
+    d = request.json
+    sess_name = d.get('session_name', 'Session ' + datetime.now().strftime('%d %b %Y %H:%M'))
+    class_name = d.get('class_name', '')
+    face_descriptors = d.get('descriptors', [])
+    conn = get_db()
+    students = (fetchall(conn, 'SELECT * FROM students WHERE class_name=?', (class_name,))
+                if class_name else fetchall(conn, 'SELECT * FROM students'))
+    if not students: conn.close(); return jsonify({'error': 'No students found'}), 400
+    sids = [s['id'] for s in students]
+    face_db = build_face_db(sids)
+    if not face_db: conn.close(); return jsonify({'error': 'No face descriptors saved yet. Upload faces first.'}), 400
+    cur = execute(conn, 'INSERT INTO attendance_sessions (session_name,class_name,teacher_id,date) VALUES (?,?,?,?)',
+                  (sess_name, class_name, session['user_id'], date.today().isoformat()))
+    sess_id = lastrowid(conn, cur); conn.commit()
+    for sid in sids:
+        execute(conn, 'INSERT INTO attendance_records (session_id,student_id,status) VALUES (?,?,?)', (sess_id, sid, 'absent'))
+    conn.commit()
+    marked = []
+    recognized = []
+    for descriptor in face_descriptors:
+        sid, confidence = recognize_descriptor(descriptor, face_db)
+        if sid and sid in sids and sid not in marked:
+            execute(conn, 'UPDATE attendance_records SET status=?,confidence=? WHERE session_id=? AND student_id=?',
+                    ('present', float(confidence), sess_id, sid))
+            s = fetchone(conn, 'SELECT name,roll_number FROM students WHERE id=?', (sid,))
+            recognized.append({'name': s['name'], 'roll': s['roll_number'], 'confidence': confidence})
+            marked.append(sid)
+    conn.commit()
+    records = fetchall(conn, 'SELECT s.name,s.roll_number,ar.status,ar.confidence FROM attendance_records ar JOIN students s ON s.id=ar.student_id WHERE ar.session_id=? ORDER BY s.name', (sess_id,))
+    conn.close()
+    att = [{'name': r['name'], 'roll': r['roll_number'], 'status': r['status'], 'confidence': r['confidence']} for r in records]
+    return jsonify({'success': True, 'faces_detected': len(face_descriptors), 'recognized': recognized,
+                    'attendance': att, 'present_count': len(marked), 'total_students': len(students)})
 
 @app.route('/api/attendance/history')
 @login_required
